@@ -1,0 +1,24 @@
+---
+- hosts: localhost
+  vars:
+    - jenkins_uri: "http://jenkins-01.cumulusnetworks.com:8080"
+    - branch: master
+
+  tasks:
+  - jenkins_job: uri={{jenkins_uri}}
+             username={{username}}
+             password={{password}}
+             name="test"
+             config="{{lookup('template', 'templates/empty.xml.j2')}}"
+
+  - jenkins_job: uri={{jenkins_uri}}
+             username={{username}}
+             password={{password}}
+             name="test"
+             operation=disable
+
+  - jenkins_job: uri={{jenkins_uri}}
+             username={{username}}
+             password={{password}}
+             name="test"
+             operation=delete
