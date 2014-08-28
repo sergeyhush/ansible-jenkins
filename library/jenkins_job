@@ -79,6 +79,25 @@ EMPTY_JOB_CONFIG = """
 """
 
 
+class CsrftokenRequester(jenkinsapi.jenkins.Requester):
+    NO_VALID_CRUMB = 'No valid crumb was included'
+    CRUMB_API = 'crumbIssuer/api/json'
+
+    def post_url(self, url, params=None, data=None, headers=None):
+        if hasattr(self, 'crumbs') and self.crumbs:
+            headers[self.crumbs['crumbRequestField']] = self.crumbs['crumb']
+        response = super(CsrftokenRequester, self).post_url(url, params, data, headers)
+        if response.status_code == 403 and CsrftokenRequester.NO_VALID_CRUMB in response.text:
+            base_url = response.request.url.rstrip(response.request.path_url).rstrip('/')
+            crumb_response = self.get_url(base_url + '/' + CsrftokenRequester.CRUMB_API)
+            if crumb_response.status_code == 200:
+                self.crumbs = crumb_response.json()
+            headers[self.crumbs['crumbRequestField']] = self.crumbs['crumb']
+            response = super(CsrftokenRequester, self).post_url(url, params, data, headers)
+
+        return response
+
+
 def _jenkins(uri, username, password):
     return jenkinsapi.jenkins.Jenkins(uri,
                                       username=username,
