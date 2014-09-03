@@ -1,0 +1,147 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+DOCUMENTATION = """
+module: jenkins_view
+short_decription: Manipulate views in a Jenkins instance
+description:
+  - Manipulate view in a Jenkins instance
+
+options:
+  uri:
+    required: true
+    description:
+      - Base URI for the Jenkins instance
+
+  operation:
+    required: true
+    choices: [ create, delete, modify ]
+    description:
+      - Operation to perform
+
+  username:
+    required: true
+    description:
+      - The username to log-in with.
+
+  password:
+    required: true
+    description:
+      - The password to log-in with.
+
+  name:
+    required: true
+    description:
+      - View name
+
+  job:
+   description:
+     - Configuration in XML format
+"""
+
+EXAMPLES = """
+# Create new job
+- name: Create new job
+  jenkins_job: uri={{jenkins_uri}} username={{user}} password={{password}}
+           name={{job_name}}
+
+# Delete an existing job
+- name: Delete a job
+  jenkins_job: uri={{jenkins_uri}} username={{username}} password={{password}}
+             name="test_{{branch}}" operation=delete
+"""
+
+HAS_JENKINS_API = True
+try:
+    import jenkinsapi
+    import jenkinsapi.jenkins
+except ImportError:
+    HAS_JENKINS_API = False
+
+
+def _jenkins(uri, username, password):
+    return jenkinsapi.jenkins.Jenkins(uri,
+                                      username=username,
+                                      password=password)
+
+
+def create(uri, user, password, name, job):
+    jenkins = _jenkins(uri, user, password)
+    views = jenkins.views
+    if name in views:
+        return False, "Failed to create view '%s' - already exists." % name
+    views.create(name)
+    if name not in views:
+        return False, "Failed to create view '%s'." % name
+    return True, None
+
+
+def delete(uri, user, password, name, job):
+    jenkins = _jenkins(uri, user, password)
+    views = jenkins.views
+    if name not in views:
+        return False, "Could not delete '%s' - unknown view." % name
+    j.delete_job(name)
+    if name in views:
+        return False, "Could not delete '%s'." % name
+    return True, None
+
+
+def addjob(uri, user, pasword, name, job):
+    jenkins = _jenkins(uri, user, pasword)
+    views = jenkins.views
+    if name not in views:
+        return False, "Failed to find view '%s'." % name
+    view = views[name]
+    if job in view:
+        return False, "Failed to add job '%s' to view '%s' - already added." % (job, name)
+    else:
+        views[name].add_job(job)
+        return True, None
+
+
+# def removejob(uri, user, pasword, name, job):
+#     jenkins = _jenkins(uri, user, pasword)
+#     views = jenkins.views()
+#     if name in views:
+#         return False, "Failed to find view '%s'." % name
+#     views[name].add_job(job)
+#     return True, None
+
+def main():
+    module = AnsibleModule(
+        argument_spec=dict(
+            uri=dict(required=True),
+            operation=dict(default='create', choices=['create', 'delete', 'addjob']),
+            username=dict(required=True),
+            password=dict(required=True),
+            name=dict(required=True),
+            job=dict(),
+        ),
+        supports_check_mode=False
+    )
+
+    if not HAS_JENKINS_API:
+        module.fail_json(msg="Could not import python modules: jenkinsapi. Please install jenkinsapi package.")
+
+    uri = module.params['uri']
+    username = module.params['username']
+    password = module.params['password']
+    name = module.params['name']
+    job = module.params['job']
+    try:
+        op = module.params['operation']
+        thismodule = sys.modules[__name__]
+        method = getattr(thismodule, op)
+        changed, msg = method(uri, username, password, name, job)
+        args = {'changed': changed}
+        if msg:
+            args['msg'] = msg
+        module.exit_json(**args)
+    except Exception as ex:
+        return module.fail_json(msg=ex.message)
+
+
+from ansible.module_utils.basic import *
+
+main()

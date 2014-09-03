@@ -48,7 +48,7 @@ EXAMPLES = """
 # Delete an existing job
 - name: Delete a job
   jenkins_job: uri={{jenkins_uri}} username={{username}} password={{password}}
-             name="{{job_name}}" operation=delete
+             name="test_{{branch}}" operation=delete
 """
 
 HAS_JENKINS_API = True
@@ -86,14 +86,14 @@ class CsrftokenRequester(jenkinsapi.jenkins.Requester):
     def post_url(self, url, params=None, data=None, headers=None):
         if hasattr(self, 'crumbs') and self.crumbs:
             headers[self.crumbs['crumbRequestField']] = self.crumbs['crumb']
-        response = super(CsrftokenRequester, self).post_url(url, params, data, headers)
+        response = jenkinsapi.jenkins.Requester.post_url(self, url, params, data, headers)
         if response.status_code == 403 and CsrftokenRequester.NO_VALID_CRUMB in response.text:
             base_url = response.request.url.rstrip(response.request.path_url).rstrip('/')
             crumb_response = self.get_url(base_url + '/' + CsrftokenRequester.CRUMB_API)
             if crumb_response.status_code == 200:
                 self.crumbs = crumb_response.json()
             headers[self.crumbs['crumbRequestField']] = self.crumbs['crumb']
-            response = super(CsrftokenRequester, self).post_url(url, params, data, headers)
+            response = jenkinsapi.jenkins.Requester.post_url(self, url, params, data, headers)
 
         return response
 
@@ -102,6 +102,7 @@ def _jenkins(uri, username, password):
     return jenkinsapi.jenkins.Jenkins(uri,
                                       username=username,
                                       password=password)
+    # requester=CsrftokenRequester())
 
 
 def _clean_xml_str(data):
@@ -168,7 +169,8 @@ def main():
             username=dict(required=True),
             password=dict(required=True),
             name=dict(required=True),
-            config=dict(),
+            config=dict(required=False, default=EMPTY_JOB_CONFIG),
+            config_params=dict(required=False, type='dict', default={})
         ),
         supports_check_mode=False
     )
@@ -180,12 +182,15 @@ def main():
     username = module.params['username']
     password = module.params['password']
     name = module.params['name']
+    config_params = module.params['config_params']
     config = module.params['config']
+
+    config_str = template.template_from_file(None, config, config_params)
     try:
         op = module.params['operation']
         thismodule = sys.modules[__name__]
         method = getattr(thismodule, op)
-        changed, msg = method(uri, username, password, name, config)
+        changed, msg = method(uri, username, password, name, config_str)
         args = {'changed': changed}
         if msg:
             args['msg'] = msg
@@ -195,5 +200,6 @@ def main():
 
 
 from ansible.module_utils.basic import *
+from ansible.utils import template
 
 main()
